@@ -426,6 +426,139 @@ header {
 /* empty state */
 .empty { text-align: center; color: var(--muted); font-size: 10px; padding: 20px 8px; letter-spacing: .04em; }
 
+/* ── SYSTEM STRIP ────────────────────────── */
+.sys-strip {
+  display: flex;
+  align-items: stretch;
+  background: #07070D;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.sys-strip::-webkit-scrollbar { height: 2px; }
+.sys-strip::-webkit-scrollbar-thumb { background: var(--border); }
+
+.sys-strip-lbl {
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+  flex-shrink: 0;
+  opacity: .7;
+}
+
+.sys-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 14px;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
+  transition: background .1s, color .1s;
+  min-height: 34px;
+  position: relative;
+}
+.sys-tab:hover { background: rgba(255,255,255,.02); color: var(--text); }
+.sys-tab.active {
+  color: var(--ok);
+  background: rgba(0,204,144,.05);
+}
+.sys-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--ok);
+}
+.sys-tab-name { max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.sys-tab-del {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity .1s, color .1s;
+  font-family: var(--mono);
+}
+.sys-tab:hover .sys-tab-del { opacity: 1; }
+.sys-tab-del:hover { color: var(--err); }
+
+.sys-new-btn {
+  padding: 0 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--muted);
+  letter-spacing: .06em;
+  transition: color .1s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.sys-new-btn:hover { color: var(--ok); }
+
+/* ── SYSTEM META (left col) ──────────────── */
+#sys-meta { margin-bottom: 12px; }
+
+.sys-name-f {
+  width: 100%;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-s);
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  padding: 4px 2px 6px;
+  outline: none;
+  letter-spacing: .02em;
+  margin-bottom: 6px;
+  transition: border-color .15s;
+}
+.sys-name-f:focus { border-bottom-color: var(--ok); }
+.sys-name-f::placeholder { color: var(--muted); font-weight: 400; }
+
+.sys-desc-f {
+  width: 100%;
+  background: none;
+  border: none;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  padding: 0 2px 8px;
+  outline: none;
+  resize: none;
+  line-height: 1.6;
+  letter-spacing: .02em;
+  min-height: 36px;
+  max-height: 72px;
+  transition: color .15s;
+}
+.sys-desc-f:focus { color: var(--text); }
+.sys-desc-f::placeholder { color: var(--muted); opacity: .55; }
+
+.sys-meta-rule {
+  height: 1px;
+  background: var(--border-s);
+  margin-bottom: 12px;
+}
+
 /* ── ONBOARDING ──────────────────────────── */
 #onboard {
   position: fixed;
@@ -689,6 +822,13 @@ header {
   </div>
 </header>
 
+<!-- ── SYSTEM STRIP ───────────────────────────────────────── -->
+<div class="sys-strip">
+  <span class="sys-strip-lbl">Systeme</span>
+  <div id="sys-tabs"></div>
+  <button class="sys-new-btn" onclick="createSystem()">+ Neues System</button>
+</div>
+
 <!-- ── WORKSPACE ─────────────────────────────────────────── -->
 <div class="workspace">
 
@@ -699,6 +839,17 @@ header {
       <div class="col-desc">Ressourcen (Menge X)</div>
     </div>
     <div class="col-body">
+      <!-- System meta: name + description -->
+      <div id="sys-meta">
+        <input  class="sys-name-f" id="sys-name-f" type="text"
+          placeholder="Systemname …" maxlength="60"
+          oninput="updateMeta()"
+          onkeydown="if(event.key==='Enter') document.getElementById('sys-desc-f').focus()">
+        <textarea class="sys-desc-f" id="sys-desc-f"
+          placeholder="Beschreibung des zu prüfenden Systems …"
+          oninput="updateMeta(); autosize(this)"></textarea>
+        <div class="sys-meta-rule"></div>
+      </div>
       <div id="comp-list" class="comp-list"></div>
       <div class="add-row">
         <input class="field" id="comp-inp" type="text" placeholder="z. B. »Führung«" maxlength="40"
@@ -818,9 +969,79 @@ header {
 
 <script>
 // ── STATE ──────────────────────────────────────────────────────
-let S = { comps: [], rxns: [], analysis: null };
+let systems  = {};
+let activeId = null;
 let _id = 0;
-const uid = () => ++_id;
+const uid  = () => ++_id;
+const STORE = 'cot_trady_ss26';
+
+function cur() {
+  return activeId && systems[activeId] ? systems[activeId] : null;
+}
+
+function _createSysObj(name) {
+  const id = 'sys_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+  return { id, name: name || '', desc: '', comps: [], rxns: [], analysis: null };
+}
+
+function createSystem(name) {
+  const s = _createSysObj(name || '');
+  systems[s.id] = s;
+  activeId = s.id;
+  save(); render();
+  if (!name) {
+    const ni = document.getElementById('sys-name-f');
+    if (ni) { ni.focus(); ni.select(); }
+  }
+}
+
+function deleteSystem(id) {
+  if (!systems[id]) return;
+  const ids = Object.keys(systems);
+  if (ids.length <= 1) { systems[id] = _createSysObj(''); activeId = id; save(); render(); return; }
+  delete systems[id];
+  const remaining = Object.keys(systems);
+  if (activeId === id) activeId = remaining[remaining.length - 1];
+  save(); render();
+}
+
+function switchSystem(id) {
+  if (systems[id]) { activeId = id; save(); render(); }
+}
+
+function updateMeta() {
+  const s = cur(); if (!s) return;
+  s.name = document.getElementById('sys-name-f')?.value || '';
+  s.desc = document.getElementById('sys-desc-f')?.value || '';
+  renderSysBar(); save();
+}
+
+function autosize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+function save() {
+  try {
+    const sysCopy = {};
+    for (const [id, s] of Object.entries(systems)) {
+      sysCopy[id] = { ...s, rxns: s.rxns.map(r => ({ ...r })), analysis: null };
+    }
+    localStorage.setItem(STORE, JSON.stringify({ systems: sysCopy, activeId }));
+  } catch(e) {}
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data.systems || !Object.keys(data.systems).length) return false;
+    systems  = data.systems;
+    activeId = data.activeId && systems[data.activeId] ? data.activeId : Object.keys(systems)[0];
+    return true;
+  } catch(e) { return false; }
+}
 
 // ── COT CORE ──────────────────────────────────────────────────
 function parseRxn(text) {
@@ -855,22 +1076,25 @@ function cot(comps, rxns) {
 
 // ── ACTIONS ───────────────────────────────────────────────────
 function addComponent() {
+  const s = cur(); if (!s) return;
   const inp = document.getElementById('comp-inp');
   const n   = inp.value.trim();
-  if (!n || S.comps.includes(n)) { inp.select(); return; }
-  S.comps.push(n);
+  if (!n || s.comps.includes(n)) { inp.select(); return; }
+  s.comps.push(n);
   inp.value = '';
-  S.analysis = null;
-  render();
+  s.analysis = null;
+  save(); render();
 }
 
 function removeComp(name) {
-  S.comps = S.comps.filter(c => c !== name);
-  S.analysis = null;
-  render();
+  const s = cur(); if (!s) return;
+  s.comps = s.comps.filter(c => c !== name);
+  s.analysis = null;
+  save(); render();
 }
 
 function addReaction() {
+  const s = cur(); if (!s) return;
   const inp = document.getElementById('rxn-inp');
   const err = document.getElementById('rxn-err');
   const raw = inp.value.trim();
@@ -882,61 +1106,93 @@ function addReaction() {
     return;
   }
   err.style.display = 'none';
-  // Auto-add unknown components
-  [...p.inputs, ...p.outputs].forEach(t => { if (!S.comps.includes(t)) S.comps.push(t); });
-  S.rxns.push({ id: uid(), ...p });
+  [...p.inputs, ...p.outputs].forEach(t => { if (!s.comps.includes(t)) s.comps.push(t); });
+  s.rxns.push({ id: uid(), ...p });
   inp.value = '';
-  S.analysis = null;
-  render();
+  s.analysis = null;
+  save(); render();
 }
 
 function removeRxn(id) {
-  S.rxns = S.rxns.filter(r => r.id !== id);
-  S.analysis = null;
-  render();
+  const s = cur(); if (!s) return;
+  s.rxns = s.rxns.filter(r => r.id !== id);
+  s.analysis = null;
+  save(); render();
 }
 
 function runAnalysis() {
-  if (S.comps.length === 0) return;
-  S.analysis = cot(S.comps, S.rxns);
-  render();
+  const s = cur(); if (!s || s.comps.length === 0) return;
+  s.analysis = cot(s.comps, s.rxns);
+  save(); render();
 }
 
 function resetAnalysis() {
-  S.analysis = null;
-  render();
+  const s = cur(); if (!s) return;
+  s.analysis = null;
+  save(); render();
 }
 
 // ── RENDER ────────────────────────────────────────────────────
 function render() {
+  renderSysBar();
+  renderSysMeta();
   renderComps();
   renderRxns();
   renderAnalysis();
   renderViz();
 }
 
+function renderSysBar() {
+  const tabs = document.getElementById('sys-tabs');
+  if (!tabs) return;
+  const ids = Object.keys(systems);
+  tabs.innerHTML = ids.map(id => {
+    const s = systems[id];
+    const lbl = s.name.trim() || 'System';
+    const active = id === activeId ? ' active' : '';
+    return `<div class="sys-tab${active}" onclick="switchSystem('${id}')">
+      <span class="sys-tab-lbl">${x(lbl)}</span>
+      <button class="sys-tab-del" onclick="event.stopPropagation();deleteSystem('${id}')" title="System löschen">×</button>
+    </div>`;
+  }).join('');
+}
+
+function renderSysMeta() {
+  const s  = cur();
+  const ni = document.getElementById('sys-name-f');
+  const di = document.getElementById('sys-desc-f');
+  if (!ni || !di) return;
+  ni.value = s ? s.name : '';
+  di.value = s ? s.desc : '';
+  autosize(di);
+}
+
 function renderComps() {
+  const s   = cur();
   const el  = document.getElementById('comp-list');
-  const act = S.analysis ? new Set(S.analysis.R_X.flatMap(r => [...r.inputs, ...r.outputs])) : new Set();
-  if (!S.comps.length) {
+  if (!s) { el.innerHTML = '<div class="empty">Kein System ausgewählt.</div>'; return; }
+  const act = s.analysis ? new Set(s.analysis.R_X.flatMap(r => [...r.inputs, ...r.outputs])) : new Set();
+  if (!s.comps.length) {
     el.innerHTML = '<div class="empty">Noch keine Bestandteile.</div>'; return;
   }
-  el.innerHTML = S.comps.map(c => `
-    <div class="comp-tag ${act.has(c) && S.analysis ? 'active' : ''}">
+  el.innerHTML = s.comps.map(c => `
+    <div class="comp-tag ${act.has(c) && s.analysis ? 'active' : ''}">
       <span class="comp-name">${x(c)}</span>
-      ${act.has(c) && S.analysis ? '<span class="comp-badge">aktiv</span>' : ''}
+      ${act.has(c) && s.analysis ? '<span class="comp-badge">aktiv</span>' : ''}
       <button class="btn-x" onclick="removeComp('${x(c)}')" title="Entfernen">×</button>
     </div>`).join('');
 }
 
 function renderRxns() {
+  const s    = cur();
   const el   = document.getElementById('rxn-list');
-  const tIds = S.analysis ? new Set(S.analysis.R_X.map(r => r.id)) : new Set();
-  if (!S.rxns.length) {
+  if (!s) { el.innerHTML = '<div class="empty">Kein System ausgewählt.</div>'; return; }
+  const tIds = s.analysis ? new Set(s.analysis.R_X.map(r => r.id)) : new Set();
+  if (!s.rxns.length) {
     el.innerHTML = '<div class="empty">Noch keine Reaktionen.</div>'; return;
   }
-  el.innerHTML = S.rxns.map((r, i) => `
-    <div class="rxn-card ${tIds.has(r.id) && S.analysis ? 'active' : ''}">
+  el.innerHTML = s.rxns.map((r, i) => `
+    <div class="rxn-card ${tIds.has(r.id) && s.analysis ? 'active' : ''}">
       <span class="rxn-nr">R${i+1}</span>
       <span class="rxn-formula">
         <span class="rxn-in">${r.inputs.map(x).join(' + ')}</span>
@@ -954,7 +1210,8 @@ function renderAnalysis() {
   };
   const setDot = (id, cls) => document.getElementById(id).className = `dot ${cls}`;
 
-  if (!S.analysis) {
+  const s = cur();
+  if (!s || !s.analysis) {
     setDot('dot-cl','n'); set('st-cl','check-st n','—');
     setDot('dot-sm','n'); set('st-sm','check-st n','—');
     document.getElementById('tags-cl').innerHTML = '';
@@ -966,7 +1223,7 @@ function renderAnalysis() {
     return;
   }
 
-  const { closed, clViol, selfM, smViol, isOrg, R_X, consumed, produced } = S.analysis;
+  const { closed, clViol, selfM, smViol, isOrg, R_X, consumed, produced } = s.analysis;
 
   // Closure
   setDot('dot-cl', closed ? 'ok' : 'err');
@@ -992,9 +1249,9 @@ function renderAnalysis() {
   const cardRxn = document.getElementById('card-rxn');
   cardRxn.style.display = 'block';
   setDot('dot-rx','n');
-  set('st-rx','check-st n', `${R_X.length} / ${S.rxns.length}`);
+  set('st-rx','check-st n', `${R_X.length} / ${s.rxns.length}`);
   document.getElementById('tags-rx').innerHTML = R_X.length
-    ? R_X.map(r => { const i = S.rxns.findIndex(rx => rx.id === r.id); return `<span class="tag ok">R${i+1}</span>`; }).join('')
+    ? R_X.map(r => { const i = s.rxns.findIndex(rx => rx.id === r.id); return `<span class="tag ok">R${i+1}</span>`; }).join('')
     : '<span class="tag n">Keine Reaktion auslösbar</span>';
 
   // Organization
@@ -1017,44 +1274,44 @@ function renderViz() {
   const svg = document.getElementById('net');
   const W = svg.clientWidth  || 800;
   const H = svg.clientHeight || 140;
+  const s = cur();
 
-  if (!S.comps.length && !S.rxns.length) {
+  if (!s || (!s.comps.length && !s.rxns.length)) {
     svg.innerHTML = `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#2E2E42" font-size="10" font-family="'JetBrains Mono',monospace" letter-spacing="0.06em">// keine elemente definiert</text>`;
     return;
   }
 
-  const trigIds  = S.analysis ? new Set(S.analysis.R_X.map(r => r.id)) : new Set();
-  const actComps = S.analysis ? new Set(S.analysis.R_X.flatMap(r => [...r.inputs, ...r.outputs])) : new Set();
+  const trigIds  = s.analysis ? new Set(s.analysis.R_X.map(r => r.id)) : new Set();
+  const actComps = s.analysis ? new Set(s.analysis.R_X.flatMap(r => [...r.inputs, ...r.outputs])) : new Set();
 
   // Build nodes
   const nodeMap = {};
   const nodes   = [];
 
-  S.comps.forEach((c, i) => {
+  s.comps.forEach((c, i) => {
     const id = `c${i}`;
     nodeMap[c] = id;
     nodes.push({
       id, type: 'res', label: c, active: actComps.has(c),
-      x: 60 + (i / Math.max(S.comps.length - 1, 1)) * (W - 120),
+      x: 60 + (i / Math.max(s.comps.length - 1, 1)) * (W - 120),
       y: H * 0.3 + (i % 2 === 0 ? -14 : 14),
       vx: 0, vy: 0
     });
   });
 
-  S.rxns.forEach((r, i) => {
+  s.rxns.forEach((r, i) => {
     const id = `r${i}`;
     nodes.push({
       id, type: 'rxn', label: `R${i+1}`, active: trigIds.has(r.id),
-      x: 60 + (i / Math.max(S.rxns.length - 1, 1)) * (W - 120),
+      x: 60 + (i / Math.max(s.rxns.length - 1, 1)) * (W - 120),
       y: H * 0.68,
       vx: 0, vy: 0
     });
-    // edge references keep reaction index for lookup
     r._nodeId = id;
   });
 
   const edges = [];
-  S.rxns.forEach((r, i) => {
+  s.rxns.forEach((r, i) => {
     const rn = `r${i}`;
     r.inputs.forEach(inp  => { if (nodeMap[inp])  edges.push({ s: nodeMap[inp], t: rn }); });
     r.outputs.forEach(out => { if (nodeMap[out])  edges.push({ s: rn, t: nodeMap[out] }); });
@@ -1214,10 +1471,12 @@ const PRESETS = {
 
 function loadPreset(name) {
   const p = PRESETS[name]; if (!p) return;
-  S.comps = [...p.comps];
-  S.rxns  = p.rxns.map(r => { const pr = parseRxn(r); return pr ? { id: uid(), ...pr } : null; }).filter(Boolean);
-  S.analysis = null;
-  render();
+  let s = cur();
+  if (!s) { createSystem(name); s = cur(); }
+  s.comps    = [...p.comps];
+  s.rxns     = p.rxns.map(r => { const pr = parseRxn(r); return pr ? { id: uid(), ...pr } : null; }).filter(Boolean);
+  s.analysis = null;
+  save(); render();
 }
 
 // ── UTILS ─────────────────────────────────────────────────────
@@ -1237,6 +1496,11 @@ document.addEventListener('keydown', e => {
 });
 
 // ── BOOT ──────────────────────────────────────────────────────
+if (!load()) {
+  const def = _createSysObj('');
+  systems[def.id] = def;
+  activeId = def.id;
+}
 render();
 window.addEventListener('resize', renderViz);
 </script>
